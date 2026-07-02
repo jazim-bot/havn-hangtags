@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Streamlit secrets — never commit the real password
+.streamlit/secrets.toml
+
+# Generated / scratch output
+*.pdf
+!assets/*.pdf
+out_*.png
+view_*.png
+prev_*.png
+.DS_Store

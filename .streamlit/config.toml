@@ -1,0 +1,14 @@
+# Streamlit theme — matches the Havn Club look (ivory + brand green).
+[theme]
+base = "light"
+primaryColor = "#14361b"
+backgroundColor = "#faf7f1"
+secondaryBackgroundColor = "#f1ece2"
+textColor = "#2a2723"
+
+[server]
+# Allow larger uploads (packing sheets / logos are small, but be generous).
+maxUploadSize = 50
+
+[browser]
+gatherUsageStats = false
