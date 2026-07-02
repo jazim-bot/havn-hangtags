@@ -8,28 +8,21 @@ enter the password.
 - A **password gate** (`app.py`): the app asks for a password when `app_password`
   is set in Streamlit secrets.
 - Theme, upload limits, and a `.gitignore` that keeps the real password out of git.
-- The git repo is **initialized and committed** locally, ready to push.
+- **The code is already on GitHub (private):**
+  <https://github.com/jazim-bot/havn-hangtags>  ← Step 1 is DONE.
 
-## Step 1 — Put the code on GitHub (one time)
-You're signed in to git as `jakk225`. Create an empty repo and push:
-
-1. Go to <https://github.com/new>, name it e.g. `havn-hangtags`, **Private**, and
-   **do not** add a README/.gitignore (the repo already has them). Click *Create*.
-2. Back in Terminal, from this folder, run the two lines GitHub shows you (they
-   look like this — use your real repo URL):
-   ```bash
-   git remote add origin https://github.com/jakk225/havn-hangtags.git
-   git push -u origin main
-   ```
-   If it asks you to sign in, use your GitHub username + a *personal access token*
-   (GitHub → Settings → Developer settings → Tokens) as the password.
+## Step 1 — Put the code on GitHub ✅ DONE
+Already pushed to `jazim-bot/havn-hangtags` (private). Nothing to do here.
+(When you deploy in Step 2, sign into Streamlit with the **jazim-bot** GitHub
+account — that's the account that owns this repo.)
 
 ## Step 2 — Deploy on Streamlit Community Cloud (one time)
-1. Go to <https://share.streamlit.io> and **sign in with GitHub**.
+1. Go to <https://share.streamlit.io> and **sign in with GitHub** (use the
+   **jazim-bot** account).
 2. Click **Create app → Deploy a public app from a repo** (a private GitHub repo is
    fine; the running app can still be password-gated).
 3. Pick:
-   - **Repository:** `jakk225/havn-hangtags`
+   - **Repository:** `jazim-bot/havn-hangtags`
    - **Branch:** `main`
    - **Main file path:** `app.py`
 4. Click **Advanced settings → Secrets** and paste:
