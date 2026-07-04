@@ -87,15 +87,18 @@ class Config:
     rows: int = 2            # cards down  (cols*rows = cards-per-sheet = 4)
     gutter_x: float = 0.0    # horizontal space between cards (inches)
     gutter_y: float = 0.0    # vertical space between cards (inches)
-    card_pad: float = 0.34   # inner padding inside each card (inches)
+    # Inner padding — also the SAFE MARGIN from the paper edge. The 4 cards fill
+    # the whole sheet, so the outer cards' edges sit in the printer's non-printable
+    # border; this keeps content clear of it. Increase if your printer still clips.
+    card_pad: float = 0.45
 
     orientation: str = ORIENT_LANDSCAPE  # sideways hang tags by default
 
     # --- Logo -----------------------------------------------------------------
     front_logo_w: float = 1.45   # printed logo width on the FRONT (inches)
-    front_logo_top: float = 0.34 # gap from card top edge to top of logo (inches)
+    front_logo_top: float = 0.42 # gap from card top edge to top of logo (inches)
     back_logo_w: float = 1.05    # printed logo width on the BACK (inches)
-    back_logo_bottom: float = 0.34  # gap from card bottom edge to bottom of logo
+    back_logo_bottom: float = 0.42  # gap from card bottom edge to bottom of logo
     logo_color: str = LOGO_GREEN
     logo_hex: str = BRAND_GREEN_HEX  # used when logo_color == green (or custom)
 

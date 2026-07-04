@@ -227,14 +227,27 @@ def _back_cell(cfg: Config, row: int, col: int):
     """
     3. DUPLEX FLIP LOGIC — map a FRONT cell to its BACK cell + rotate flag.
 
-    long_edge  (flip about vertical edge): columns mirror, upright.
-               -> (row, cols-1-col), rotate=False
-    short_edge (flip about horizontal edge): rows mirror, upside-down.
-               -> (rows-1-row, col), rotate=True (180 deg)
+    POSITION mirror depends only on the paper flip axis:
+      long_edge  (flip about vertical edge)   -> columns mirror (row, cols-1-col)
+      short_edge (flip about horizontal edge) -> rows mirror    (rows-1-row, col)
+
+    CONTENT rotation (whether the back reads upright or upside-down) depends on
+    BOTH the flip axis AND the tag orientation. For PORTRAIT content the standard
+    rule holds: long-edge = upright, short-edge = 180. But LANDSCAPE artwork is
+    itself rotated 90 in the cell, which swaps the pairing — so a long-edge flip
+    of a landscape tag needs the back rotated 180 (and short-edge needs upright).
+    Hence: rotate = (short-edge) XOR (landscape).
+      portrait  + long  -> upright     portrait  + short -> 180
+      landscape + long  -> 180         landscape + short -> upright
     """
-    if cfg.flip_mode == C.FLIP_SHORT_EDGE:
-        return cfg.rows - 1 - row, col, True
-    return row, cfg.cols - 1 - col, False
+    is_short = cfg.flip_mode == C.FLIP_SHORT_EDGE
+    is_landscape = cfg.orientation == C.ORIENT_LANDSCAPE
+    if is_short:
+        brow, bcol = cfg.rows - 1 - row, col
+    else:
+        brow, bcol = row, cfg.cols - 1 - col
+    rotate = is_short != is_landscape   # XOR
+    return brow, bcol, rotate
 
 
 # ===========================================================================
@@ -303,6 +316,41 @@ def _fit_size(text, font, max_w, start, floor):
     size = start
     while size > floor and pdfmetrics.stringWidth(text, font, size) > max_w:
         size -= 0.5
+    return size
+
+
+def _place_lines(c, cx, region_top, region_bottom, texts, font, max_w,
+                 max_size, leading, tracking=0.0, color=(0.1, 0.1, 0.1),
+                 bold=False):
+    """
+    Auto-fit a stack of centered text lines into [region_bottom, region_top] and
+    draw them, using the font's REAL ascent/descent so the block's true visual
+    height (not just baseline spacing) fits the region. This is what keeps names
+    and meal lists clear of the card edges / logo — the earlier baseline-only
+    math let descenders spill ~12pt past the padding.
+
+    Returns the chosen font size.
+    """
+    n = len(texts)
+    region_h = max(region_top - region_bottom, 1.0)
+    # Ascent/descent are linear in size; measure per-point at 1000 and scale.
+    a1, d1 = pdfmetrics.getAscentDescent(font, 1000)
+    a1, d1 = a1 / 1000.0, d1 / 1000.0            # d1 is negative
+    h_factor = (a1 - d1) + (n - 1) * leading     # visual height / size
+    size_h = region_h / h_factor if h_factor > 0 else max_size
+    widest = max((pdfmetrics.stringWidth(t, font, 1.0) for t in texts),
+                 default=1.0) or 1.0
+    size_w = max_w / widest
+    size = max(min(max_size, size_h, size_w), 4.0)
+
+    asc = a1 * size
+    line_h = size * leading
+    visual_h = (a1 - d1) * size + (n - 1) * line_h
+    center = (region_top + region_bottom) / 2
+    top_baseline = center + visual_h / 2 - asc   # place so visual block is centered
+    for i, t in enumerate(texts):
+        _draw_centered(c, cx, top_baseline - i * line_h, t, font, size,
+                       tracking=tracking, color=color, bold=bold)
     return size
 
 
@@ -392,24 +440,12 @@ def draw_front(c, x, y, w, h, cust: Customer, cfg, fonts, reader, img):
 
     region_top = logo_top - logo_h - 0.18 * inch
     region_bottom = y + pad
-    region_h = region_top - region_bottom
     max_w = w - 2 * pad
 
     lines = _split_name(cust.name, cfg.name_stack)
-    # Size the name to fill: widest line hits max_w, and all lines fit vertically.
-    # stringWidth is linear in size, so size_for_width = max_w / width_at_1pt.
-    widest = max((pdfmetrics.stringWidth(ln, font, 1.0) for ln in lines), default=1.0) or 1.0
-    size_w = max_w / widest
-    line_gap = 1.12
-    size_h = region_h / (len(lines) * line_gap)
-    size = min(size_w, size_h, cfg.name_size_max)
-
-    line_h = size * line_gap
-    top = (region_top + region_bottom) / 2 + (line_h * len(lines)) / 2 - size
-    for i, ln in enumerate(lines):
-        _draw_centered(c, cx, top - i * line_h, ln, font, size,
-                       tracking=cfg.name_tracking, color=(0.08, 0.08, 0.08),
-                       bold=cfg.name_bold)
+    _place_lines(c, cx, region_top, region_bottom, lines, font, max_w,
+                 cfg.name_size_max, 1.12, tracking=cfg.name_tracking,
+                 color=(0.08, 0.08, 0.08), bold=cfg.name_bold)
 
 
 def draw_back(c, x, y, w, h, cust: Customer, cfg, fonts, reader, img):
@@ -455,29 +491,16 @@ def draw_back(c, x, y, w, h, cust: Customer, cfg, fonts, reader, img):
     logo_top_edge = y + cfg.back_logo_bottom * inch + logo_h
 
     # --- Meals list, AUTO-FIT into the space between the name and the logo ---
-    # One uniform size chosen so the whole block fits the region both vertically
-    # (all lines stack above the logo) and horizontally (the widest line fits the
-    # card width). This guarantees the meals never spill over the logo, however
-    # many meals a customer has (e.g. a 9-meal order shrinks to fit).
+    # Metric-aware sizing (see _place_lines) so the whole block fits the region
+    # both vertically (all lines stack cleanly above the logo, descenders and all)
+    # and horizontally (widest line fits the card width). A 9- or 11-meal order
+    # simply shrinks to fit; it never spills over the logo.
     items = cust.items or [("—", 0)]
     texts = [f"{qty} × {label}" if qty else label for label, qty in items]
     region_top = cursor
     region_bottom = logo_top_edge + 0.12 * inch
-    region_h = max(region_top - region_bottom, 1.0)
-
-    n = len(texts)
-    size_h = region_h / (n * cfg.item_leading)                      # height limit
-    widest = max((pdfmetrics.stringWidth(t, fonts["body"], 1.0) for t in texts),
-                 default=1.0) or 1.0
-    size_w = max_w / widest                                         # width limit
-    size = max(min(cfg.item_size, size_h, size_w), 5.0)             # never bigger than default
-
-    line_h = size * cfg.item_leading
-    block_h = line_h * n
-    start_baseline = (region_top + region_bottom) / 2 + block_h / 2 - size
-    for i, text in enumerate(texts):
-        _draw_centered(c, cx, start_baseline - i * line_h, text,
-                       fonts["body"], size, color=(0.1, 0.1, 0.1))
+    _place_lines(c, cx, region_top, region_bottom, texts, fonts["body"], max_w,
+                 cfg.item_size, cfg.item_leading, color=(0.1, 0.1, 0.1))
 
 
 # ===========================================================================
