@@ -128,6 +128,8 @@ class Config:
     # --- Printing / imposition -----------------------------------------------
     flip_mode: str = FLIP_LONG_EDGE
     ordering_mode: str = ORDER_CUT_STACK
+    back_flip_180: bool = False   # manual override: rotate the BACK 180 if it prints
+                                  # upside-down for how you physically flip the stack
     cut_style: str = MARK_TICKS   # soft guide-mark style (see MARK_* above)
     mark_len: float = 0.2         # guide-mark length (inches)
     mark_weight: float = 0.5      # guide-mark stroke weight (points)

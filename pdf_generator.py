@@ -231,22 +231,19 @@ def _back_cell(cfg: Config, row: int, col: int):
       long_edge  (flip about vertical edge)   -> columns mirror (row, cols-1-col)
       short_edge (flip about horizontal edge) -> rows mirror    (rows-1-row, col)
 
-    CONTENT rotation (whether the back reads upright or upside-down) depends on
-    BOTH the flip axis AND the tag orientation. For PORTRAIT content the standard
-    rule holds: long-edge = upright, short-edge = 180. But LANDSCAPE artwork is
-    itself rotated 90 in the cell, which swaps the pairing — so a long-edge flip
-    of a landscape tag needs the back rotated 180 (and short-edge needs upright).
-    Hence: rotate = (short-edge) XOR (landscape).
-      portrait  + long  -> upright     portrait  + short -> 180
-      landscape + long  -> 180         landscape + short -> upright
+    CONTENT rotation (whether the back reads upright or upside-down): the standard
+    duplex rule is long-edge = back upright, short-edge = back rotated 180 — and
+    this holds for landscape tags too (verified by simulating the physical flip).
+    `back_flip_180` is a manual override for printers/flip habits that come out the
+    other way, so the operator can just tick a box instead of fighting the physics.
+      rotate = (short-edge) XOR (back_flip_180 override)
     """
     is_short = cfg.flip_mode == C.FLIP_SHORT_EDGE
-    is_landscape = cfg.orientation == C.ORIENT_LANDSCAPE
     if is_short:
         brow, bcol = cfg.rows - 1 - row, col
     else:
         brow, bcol = row, cfg.cols - 1 - col
-    rotate = is_short != is_landscape   # XOR
+    rotate = is_short != bool(cfg.back_flip_180)  # standard rule + manual override
     return brow, bcol, rotate
 
 

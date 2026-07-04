@@ -107,6 +107,12 @@ def build_config() -> Config:
             format_func=lambda v: "Cut-stack (cut into 4 piles & stack)"
             if v == C.ORDER_CUT_STACK else "Sequential (plain page order)",
         )
+        cfg.back_flip_180 = st.checkbox(
+            "Flip back 180° (if the back prints upside-down)",
+            value=False,
+            help="If the meals side comes out upside-down relative to the name "
+                 "side, tick this. It rotates every back card 180°.",
+        )
         cfg.cut_style = st.selectbox(
             "Cut guide marks",
             [C.MARK_TICKS, C.MARK_CROSS, C.MARK_CORNERS, C.MARK_LINES, C.MARK_NONE],
