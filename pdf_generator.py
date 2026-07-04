@@ -454,16 +454,28 @@ def draw_back(c, x, y, w, h, cust: Customer, cfg, fonts, reader, img):
                         fallback_font=fonts["heading"])
     logo_top_edge = y + cfg.back_logo_bottom * inch + logo_h
 
-    # --- Meals list, centered between the name block and the logo -----------
+    # --- Meals list, AUTO-FIT into the space between the name and the logo ---
+    # One uniform size chosen so the whole block fits the region both vertically
+    # (all lines stack above the logo) and horizontally (the widest line fits the
+    # card width). This guarantees the meals never spill over the logo, however
+    # many meals a customer has (e.g. a 9-meal order shrinks to fit).
     items = cust.items or [("—", 0)]
-    line_h = cfg.item_size * cfg.item_leading
-    block_h = line_h * len(items)
+    texts = [f"{qty} × {label}" if qty else label for label, qty in items]
     region_top = cursor
     region_bottom = logo_top_edge + 0.12 * inch
-    start_baseline = (region_top + region_bottom) / 2 + block_h / 2 - cfg.item_size
-    for i, (label, qty) in enumerate(items):
-        text = f"{qty} × {label}" if qty else label
-        size = _fit_size(text, fonts["body"], max_w, cfg.item_size, 7.0)
+    region_h = max(region_top - region_bottom, 1.0)
+
+    n = len(texts)
+    size_h = region_h / (n * cfg.item_leading)                      # height limit
+    widest = max((pdfmetrics.stringWidth(t, fonts["body"], 1.0) for t in texts),
+                 default=1.0) or 1.0
+    size_w = max_w / widest                                         # width limit
+    size = max(min(cfg.item_size, size_h, size_w), 5.0)             # never bigger than default
+
+    line_h = size * cfg.item_leading
+    block_h = line_h * n
+    start_baseline = (region_top + region_bottom) / 2 + block_h / 2 - size
+    for i, text in enumerate(texts):
         _draw_centered(c, cx, start_baseline - i * line_h, text,
                        fonts["body"], size, color=(0.1, 0.1, 0.1))
 
