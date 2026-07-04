@@ -108,10 +108,10 @@ def build_config() -> Config:
             if v == C.ORDER_CUT_STACK else "Sequential (plain page order)",
         )
         cfg.back_flip_180 = st.checkbox(
-            "Flip back 180° (if the back prints upside-down)",
-            value=False,
-            help="If the meals side comes out upside-down relative to the name "
-                 "side, tick this. It rotates every back card 180°.",
+            "Rotate back 180°",
+            value=True,
+            help="Rotates every back card 180° in place (positions unchanged). "
+                 "Untick only if the meals side prints upside-down with it on.",
         )
         cfg.cut_style = st.selectbox(
             "Cut guide marks",
@@ -288,6 +288,34 @@ st.subheader("⑤ Generate PDFs")
 st.caption("Print **front_cards.pdf**, flip the stack, then print "
            "**back_cards.pdf** on the same sheets. Cut with the guillotine along "
            "the lines, then stack per the cut-stack order. Test on plain paper first.")
+
+# --- Stale-output guard ------------------------------------------------------
+# The download buttons serve PDFs saved in session_state by the last "Generate"
+# click. If ANY input changes (a sidebar setting, the CSV, meal names, the logo),
+# those saved PDFs no longer reflect what's on screen — so drop them and make the
+# operator regenerate. Without this, toggles like "Rotate back 180°" appear to
+# "not work" because the old file keeps downloading.
+import hashlib as _hashlib
+import json as _json
+from dataclasses import asdict as _asdict
+
+_fp_payload = {
+    "cfg": _asdict(cfg),
+    "csv": _hashlib.md5(csv_file.getvalue()).hexdigest(),
+    "cols": selected,
+    "names": display_names,
+    "logo": _hashlib.md5(logo_bytes).hexdigest() if logo_bytes else "none",
+}
+_fingerprint = _hashlib.md5(
+    _json.dumps(_fp_payload, sort_keys=True, default=str).encode()).hexdigest()
+if st.session_state.get("pdf_fingerprint") != _fingerprint:
+    stale = any(k in st.session_state
+                for k in ("front_pdf", "back_pdf", "test_front", "test_back"))
+    for k in ("front_pdf", "back_pdf", "test_front", "test_back"):
+        st.session_state.pop(k, None)
+    st.session_state["pdf_fingerprint"] = _fingerprint
+    if stale:
+        st.info("Settings changed — click Generate again to rebuild the PDFs.")
 
 g1, g2 = st.columns(2)
 with g1:
