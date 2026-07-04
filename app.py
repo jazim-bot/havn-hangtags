@@ -299,6 +299,29 @@ st.caption("Print **front_cards.pdf**, flip the stack, then print "
            "**back_cards.pdf** on the same sheets. Cut with the guillotine along "
            "the lines, then stack per the cut-stack order. Test on plain paper first.")
 
+# --- Print scope: all / only customs / hand-picked ---------------------------
+# For partial reprints (e.g. a batch that was missed, or one damaged card)
+# without re-printing the whole run. The subset keeps route order and the
+# cut-stack imposition works the same on it.
+scope = st.radio(
+    "Which customers?",
+    ["All customers", "Only customs customers", "Pick specific customers"],
+    horizontal=True,
+)
+if scope == "Only customs customers":
+    print_customers = [c for c in customers if c.has_customs]
+elif scope == "Pick specific customers":
+    labels = [f"{i + 1}. {c.name}" for i, c in enumerate(customers)]
+    picked = st.multiselect("Customers to print", labels)
+    picked_idx = {labels.index(p) for p in picked}
+    print_customers = [c for i, c in enumerate(customers) if i in picked_idx]
+else:
+    print_customers = customers
+
+_, n_scope_pages = pdf.build_pages(len(print_customers), cfg.ordering_mode)
+st.caption(f"**{len(print_customers)}** customer(s) → **{n_scope_pages}** sheet(s) per side."
+           + ("  ⚠️ None selected." if not print_customers else ""))
+
 # --- Stale-output guard ------------------------------------------------------
 # The download buttons serve PDFs saved in session_state by the last "Generate"
 # click. If ANY input changes (a sidebar setting, the CSV, meal names, the logo),
@@ -315,6 +338,7 @@ _fp_payload = {
     "cols": selected,
     "names": display_names,
     "logo": _hashlib.md5(logo_bytes).hexdigest() if logo_bytes else "none",
+    "scope": [c.name for c in print_customers],
 }
 _fingerprint = _hashlib.md5(
     _json.dumps(_fp_payload, sort_keys=True, default=str).encode()).hexdigest()
@@ -330,10 +354,11 @@ if st.session_state.get("pdf_fingerprint") != _fingerprint:
 g1, g2 = st.columns(2)
 with g1:
     st.markdown("**Customer cards**")
-    if st.button("Generate customer cards", type="primary"):
+    if st.button("Generate customer cards", type="primary",
+                 disabled=not print_customers):
         with st.spinner("Building card PDFs…"):
-            st.session_state["front_pdf"] = pdf.generate_front(customers, cfg, logo_img)
-            st.session_state["back_pdf"] = pdf.generate_back(customers, cfg, logo_img)
+            st.session_state["front_pdf"] = pdf.generate_front(print_customers, cfg, logo_img)
+            st.session_state["back_pdf"] = pdf.generate_back(print_customers, cfg, logo_img)
     if "front_pdf" in st.session_state:
         st.download_button("⬇︎ front_cards.pdf", st.session_state["front_pdf"],
                            "front_cards.pdf", "application/pdf")

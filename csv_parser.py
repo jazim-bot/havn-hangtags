@@ -36,6 +36,11 @@ class Customer:
     items: list = field(default_factory=list)  # [(display_name, qty), ...] qty>0
     stop: str = ""
     is_plastic: bool = False
+    customizations: str = ""        # raw notes, e.g. "Partial customs- 2 total"
+
+    @property
+    def has_customs(self) -> bool:
+        return "custom" in self.customizations.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +200,7 @@ def build_customers(
                 items=items,
                 stop=str(row.get(stop_col, "")).strip() if stop_col else "",
                 is_plastic="plastic" in order_type.lower(),
+                customizations=str(row.get(customz_col, "")).strip() if customz_col else "",
             )
         )
     return customers
