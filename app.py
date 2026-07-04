@@ -247,7 +247,15 @@ m3.metric("Meals mapped", len(selected))
 
 # Show every excluded named row so a wrongly-dropped customer is caught at a
 # glance (only driver/summary/section rows should ever appear here).
-skipped = parser.skipped_rows(df, selected)
+# getattr guard: after a deploy, Streamlit Cloud can briefly run a NEW app.py
+# against a stale cached csv_parser module that predates this function — warn
+# and degrade instead of crashing; a reboot clears it.
+if hasattr(parser, "skipped_rows"):
+    skipped = parser.skipped_rows(df, selected)
+else:
+    skipped = []
+    st.warning("App update only partially loaded — use **Manage app → Reboot** "
+               "(lower right) to finish updating.")
 if skipped:
     with st.expander(f"Rows excluded from the print run ({len(skipped)}) — "
                      "check no real customer is listed here"):
