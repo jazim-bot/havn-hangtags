@@ -125,7 +125,10 @@ def _is_customer_row(row: pd.Series, cust_col, type_col, customz_col, meal_cols)
         return False
 
     customz = str(row.get(customz_col, "")).strip().lower() if customz_col else ""
-    if "total" in customz:            # ROUTE TOTAL / GRAND TOTAL
+    # Reject ONLY the summary rows. Match the exact phrases — a bare "total"
+    # test also matched customer notes like "Partial customs- 2 total" /
+    # "All are customs- 5 total" and silently dropped every customs customer.
+    if "route total" in customz or "grand total" in customz:
         return False
 
     order_type = str(row.get(type_col, "")).strip() if type_col else ""
@@ -195,6 +198,34 @@ def build_customers(
             )
         )
     return customers
+
+
+def skipped_rows(df: pd.DataFrame, meal_columns: list[str]) -> list[tuple[str, str]]:
+    """
+    Return (name, reason) for every NON-blank Customer cell that was excluded.
+    Shown in the app so a wrongly-dropped customer is visible immediately instead
+    of silently missing from the print run.
+    """
+    cust_col = _col(df, "customer")
+    type_col = _col(df, "type")
+    customz_col = _col(df, "customizations")
+    out: list[tuple[str, str]] = []
+    for _, row in df.iterrows():
+        name = str(row.get(cust_col, "")).strip()
+        if not name:
+            continue  # blank spacer — not worth listing
+        if _is_customer_row(row, cust_col, type_col, customz_col, meal_columns):
+            continue
+        if "driver" in name.lower():
+            reason = "driver row"
+        else:
+            customz = str(row.get(customz_col, "")).strip().lower() if customz_col else ""
+            if "route total" in customz or "grand total" in customz:
+                reason = "summary row"
+            else:
+                reason = "no order type and no meals (section header?)"
+        out.append((name, reason))
+    return out
 
 
 # ---------------------------------------------------------------------------

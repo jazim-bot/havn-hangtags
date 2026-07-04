@@ -245,6 +245,16 @@ m1.metric("Customers", len(customers))
 m2.metric("Sheets (per side)", n_pages)
 m3.metric("Meals mapped", len(selected))
 
+# Show every excluded named row so a wrongly-dropped customer is caught at a
+# glance (only driver/summary/section rows should ever appear here).
+skipped = parser.skipped_rows(df, selected)
+if skipped:
+    with st.expander(f"Rows excluded from the print run ({len(skipped)}) — "
+                     "check no real customer is listed here"):
+        st.dataframe(
+            pd.DataFrame(skipped, columns=["Row", "Why excluded"]),
+            hide_index=True, use_container_width=True)
+
 tab_cards, tab_names, tab_map = st.tabs(
     ["Sample cards", "Customer names", "Column mapping"])
 
