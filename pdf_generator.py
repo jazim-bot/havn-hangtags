@@ -19,8 +19,8 @@ Four tricky pieces, each documented at its function:
      portrait 4.25x5.5 cell, composing cleanly with the duplex flip.
   3. DUPLEX FLIP LOGIC (_back_cell)      — put each back card at the mirrored cell
      (and rotate 180 for short-edge) so it lands behind the right front card.
-  4. CUT LINES (_draw_cut_lines)         — full edge-to-edge guides for a
-     guillotine cutter.
+  4. CUT-GUIDE MARKS (_draw_marks)       — soft guillotine guides (ticks, cross,
+     corner ticks, or light lines) that don't mark up the finished cards.
 """
 
 from __future__ import annotations
@@ -483,28 +483,69 @@ def draw_back(c, x, y, w, h, cust: Customer, cfg, fonts, reader, img):
 # ===========================================================================
 # 4. CUT LINES (guillotine guides)
 # ===========================================================================
-def _draw_cut_lines(c, cfg):
+def _draw_marks(c, cfg):
     """
-    Draw thin, full edge-to-edge cut lines at every card boundary so a guillotine
-    can be lined up straight. Verticals span the full page height, horizontals
-    span the full page width. (With cards tiling exactly, these are the center
-    cross plus the paper edges.)
+    Draw SOFT cut-guide marks (not hard full lines) so a guillotine can be lined
+    up without the marks showing on the finished cards. Style is `cfg.cut_style`:
+      ticks   — short ticks at the sheet edges at each cut position (default),
+      cross   — a small cross where the center cuts intersect,
+      corners — soft corner ticks at each card's corners,
+      lines   — light full edge-to-edge lines,
+      none    — nothing.
     """
-    if not cfg.cut_lines:
+    style = cfg.cut_style
+    if style == C.MARK_NONE:
         return
     pw, ph = cfg.page_w * inch, cfg.page_h * inch
+    ml = cfg.mark_len * inch
+
+    # Card boundary positions, and the interior ones (where cuts actually happen).
     xs, ys = set(), set()
     for row in range(cfg.rows):
         for col in range(cfg.cols):
             x, y, w, h = _cell_rect(cfg, row, col)
             xs.update([round(x, 2), round(x + w, 2)])
             ys.update([round(y, 2), round(y + h, 2)])
-    c.setLineWidth(cfg.cut_line_width)
-    c.setStrokeColorRGB(0.6, 0.6, 0.6)
-    for x in sorted(xs):
-        c.line(x, 0, x, ph)
-    for y in sorted(ys):
-        c.line(0, y, pw, y)
+    xs, ys = sorted(xs), sorted(ys)
+    ix = [v for v in xs if 0.5 < v < pw - 0.5]   # interior vertical cut lines
+    iy = [v for v in ys if 0.5 < v < ph - 0.5]   # interior horizontal cut lines
+
+    c.setLineWidth(cfg.mark_weight)
+    c.setStrokeColorRGB(0.72, 0.71, 0.68)        # soft warm gray
+
+    if style == C.MARK_LINES:
+        for x in xs:
+            c.line(x, 0, x, ph)
+        for y in ys:
+            c.line(0, y, pw, y)
+
+    elif style == C.MARK_CROSS:
+        for x in ix:
+            for y in iy:
+                c.line(x - ml, y, x + ml, y)
+                c.line(x, y - ml, x, y + ml)
+
+    elif style == C.MARK_CORNERS:
+        for row in range(cfg.rows):
+            for col in range(cfg.cols):
+                x, y, w, h = _cell_rect(cfg, row, col)
+                for (px, py) in [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]:
+                    sx = -1 if px <= x + w / 2 else 1
+                    sy = -1 if py <= y + h / 2 else 1
+                    c.line(px, py, px + sx * ml, py)   # short arm outward (horizontal)
+                    c.line(px, py, px, py + sy * ml)   # short arm outward (vertical)
+
+    else:  # MARK_TICKS (default) — edge ticks at each cut + corner squaring ticks
+        for x in ix:
+            c.line(x, ph, x, ph - ml)   # top edge
+            c.line(x, 0, x, ml)         # bottom edge
+        for y in iy:
+            c.line(0, y, ml, y)         # left edge
+            c.line(pw, y, pw - ml, y)   # right edge
+        for (px, py, sx, sy) in [(0, 0, 1, 1), (pw, 0, -1, 1),
+                                 (0, ph, 1, -1), (pw, ph, -1, -1)]:
+            c.line(px, py, px + sx * ml, py)
+            c.line(px, py, px, py + sy * ml)
 
 
 # ===========================================================================
@@ -521,7 +562,7 @@ def _build(customers, cfg, img, draw_fn, is_back):
     c, buf = _new_canvas(cfg)
     pages, _ = build_pages(len(customers), cfg.ordering_mode)
     for cells in pages:
-        _draw_cut_lines(c, cfg)
+        _draw_marks(c, cfg)
         for (row, col, idx) in cells:
             if idx is None:
                 continue
@@ -575,7 +616,7 @@ def generate_duplex_test(cfg: Config, n: int = 8) -> tuple[bytes, bytes]:
     def render(is_back):
         c, buf = _new_canvas(cfg)
         for p, cells in enumerate(pages):
-            _draw_cut_lines(c, cfg)
+            _draw_marks(c, cfg)
             for (row, col, idx) in cells:
                 if idx is None:
                     continue

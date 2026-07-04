@@ -60,6 +60,21 @@ LOGO_ORIGINAL = "original"  # leave the artwork's own colors
 # Havn brand green (sampled from the supplied logo tile).
 BRAND_GREEN_HEX = "#0C200E"
 
+# Cut-guide mark styles (soft guides for a guillotine — never hard full lines
+# across the card faces unless you explicitly pick "lines").
+#   ticks   — short ticks at the sheet edges marking each cut position (default):
+#             line the guillotine blade up to the top+bottom ticks for the vertical
+#             cut and the left+right ticks for the horizontal cut. Faces stay clean.
+#   cross   — a small soft cross where the cuts intersect (sheet center).
+#   corners — soft corner ticks at each card's corners.
+#   lines   — full soft edge-to-edge lines (old behavior; light gray).
+#   none    — no marks.
+MARK_TICKS = "ticks"
+MARK_CROSS = "cross"
+MARK_CORNERS = "corners"
+MARK_LINES = "lines"
+MARK_NONE = "none"
+
 
 @dataclass
 class Config:
@@ -110,8 +125,9 @@ class Config:
     # --- Printing / imposition -----------------------------------------------
     flip_mode: str = FLIP_LONG_EDGE
     ordering_mode: str = ORDER_CUT_STACK
-    cut_lines: bool = True        # full edge-to-edge cut lines (for a guillotine)
-    cut_line_width: float = 0.4   # cut-line stroke weight (points)
+    cut_style: str = MARK_TICKS   # soft guide-mark style (see MARK_* above)
+    mark_len: float = 0.2         # guide-mark length (inches)
+    mark_weight: float = 0.5      # guide-mark stroke weight (points)
 
     # ------------------------------------------------------------------ helpers
     @property

@@ -107,8 +107,20 @@ def build_config() -> Config:
             format_func=lambda v: "Cut-stack (cut into 4 piles & stack)"
             if v == C.ORDER_CUT_STACK else "Sequential (plain page order)",
         )
-        cfg.cut_lines = st.checkbox(
-            "Cut lines (full lines for guillotine)", value=True)
+        cfg.cut_style = st.selectbox(
+            "Cut guide marks",
+            [C.MARK_TICKS, C.MARK_CROSS, C.MARK_CORNERS, C.MARK_LINES, C.MARK_NONE],
+            format_func=lambda v: {
+                C.MARK_TICKS: "Edge ticks (guillotine — recommended)",
+                C.MARK_CROSS: "Center cross only",
+                C.MARK_CORNERS: "Corner ticks",
+                C.MARK_LINES: "Soft full lines",
+                C.MARK_NONE: "None",
+            }[v],
+            help="Soft guides for lining up the guillotine — they don't print hard "
+                 "lines across the cards. Edge ticks mark where the two center cuts "
+                 "go; align the blade to them.",
+        )
 
     with s.expander("Logo"):
         cfg.logo_color = st.selectbox(
