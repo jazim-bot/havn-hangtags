@@ -113,19 +113,22 @@ def build_config() -> Config:
             help="Rotates every back card 180° in place (positions unchanged). "
                  "Untick only if the meals side prints upside-down with it on.",
         )
+        _mark_opts = [C.MARK_CROSS, C.MARK_TICKS, C.MARK_CORNERS,
+                      C.MARK_LINES, C.MARK_NONE]
         cfg.cut_style = st.selectbox(
             "Cut guide marks",
-            [C.MARK_TICKS, C.MARK_CROSS, C.MARK_CORNERS, C.MARK_LINES, C.MARK_NONE],
+            _mark_opts,
+            index=_mark_opts.index(Config().cut_style),  # default from Config
             format_func=lambda v: {
-                C.MARK_TICKS: "Edge ticks (guillotine — recommended)",
-                C.MARK_CROSS: "Center cross only",
+                C.MARK_CROSS: "Center cross (recommended)",
+                C.MARK_TICKS: "Edge ticks (get clipped by some printers)",
                 C.MARK_CORNERS: "Corner ticks",
                 C.MARK_LINES: "Soft full lines",
                 C.MARK_NONE: "None",
             }[v],
-            help="Soft guides for lining up the guillotine — they don't print hard "
-                 "lines across the cards. Edge ticks mark where the two center cuts "
-                 "go; align the blade to them.",
+            help="Soft guides for lining up the guillotine. The center cross sits "
+                 "mid-sheet so the printer's edge border can't clip it; cut through "
+                 "it horizontally and vertically. Same cross prints on both sides.",
         )
 
     with s.expander("Logo"):
