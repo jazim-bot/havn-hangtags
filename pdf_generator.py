@@ -531,7 +531,7 @@ def _draw_marks(c, cfg):
     iy = [v for v in ys if 0.5 < v < ph - 0.5]   # interior horizontal cut lines
 
     c.setLineWidth(cfg.mark_weight)
-    c.setStrokeColorRGB(0.72, 0.71, 0.68)        # soft warm gray
+    c.setStrokeColorRGB(0.5, 0.5, 0.5)           # medium gray — visible cut guide
 
     if style == C.MARK_LINES:
         for x in xs:

@@ -131,9 +131,12 @@ class Config:
     back_flip_180: bool = True    # rotate every BACK card 180 in place (positions
                                   # unchanged). ON by default — matches the user's
                                   # printer/flip; untick if backs come out inverted.
-    cut_style: str = MARK_TICKS   # soft guide-mark style (see MARK_* above)
-    mark_len: float = 0.2         # guide-mark length (inches)
-    mark_weight: float = 0.5      # guide-mark stroke weight (points)
+    cut_style: str = MARK_CROSS   # soft guide-mark style (see MARK_* above).
+                                  # Cross-in-the-middle by default: it sits inside
+                                  # the printable area, so the printer's edge border
+                                  # can't clip it the way edge ticks get clipped.
+    mark_len: float = 0.35        # guide-mark length (inches) — bigger cross arms
+    mark_weight: float = 0.7      # guide-mark stroke weight (points)
 
     # ------------------------------------------------------------------ helpers
     @property
