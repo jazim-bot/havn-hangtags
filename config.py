@@ -33,6 +33,19 @@ FLIP_LONG_EDGE = "long_edge"
 FLIP_SHORT_EDGE = "short_edge"
 
 # ---------------------------------------------------------------------------
+# Duplex mode — how the operator's printer puts both sides on one sheet.
+#   auto   — the printer duplexes on its own. We output ONE combined PDF with the
+#            pages interleaved (front sheet 1, back sheet 1, front sheet 2, ...);
+#            the operator just picks "Two-Sided" in the print dialog. The back
+#            imposition is IDENTICAL to a manual long-edge flip, so all the flip
+#            logic below still applies (flip_mode = the printer's binding setting).
+#   manual — the operator prints the fronts, physically flips the stack, then
+#            prints the backs. We output TWO PDFs (front_cards / back_cards).
+# ---------------------------------------------------------------------------
+DUPLEX_AUTO = "auto"
+DUPLEX_MANUAL = "manual"
+
+# ---------------------------------------------------------------------------
 # Card ordering modes.
 #   cut_stack  — impose so that after printing every sheet, cutting the whole
 #                stack into 4 position-piles (TL/TR/BR/BL) and stacking those
@@ -126,6 +139,7 @@ class Config:
     border_inset: float = 0.16    # keyline inset from card edge (inches)
 
     # --- Printing / imposition -----------------------------------------------
+    duplex_mode: str = DUPLEX_AUTO  # auto-duplex printer (one file) by default now
     flip_mode: str = FLIP_LONG_EDGE
     ordering_mode: str = ORDER_CUT_STACK
     back_flip_180: bool = True    # rotate every BACK card 180 in place (positions

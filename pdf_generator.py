@@ -576,37 +576,73 @@ def _new_canvas(cfg):
     return canvas.Canvas(buf, pagesize=(cfg.page_w * inch, cfg.page_h * inch)), buf
 
 
+def _draw_face(c, cfg, cells, customers, draw_fn, fonts, reader, img, is_back):
+    """
+    Draw ONE printed side (front or back) of one sheet: the cut-guide marks plus
+    every card in `cells`. Back cards go to their mirrored/rotated cell via
+    `_back_cell`, front cards stay put. Shared by the manual (two-file), auto
+    (interleaved one-file), and alignment-test builders so the imposition can
+    never drift between them.
+    """
+    _draw_marks(c, cfg)
+    for (row, col, idx) in cells:
+        if idx is None:
+            continue
+        if is_back:
+            brow, bcol, rot = _back_cell(cfg, row, col)
+            cell = _cell_rect(cfg, brow, bcol)
+        else:
+            cell, rot = _cell_rect(cfg, row, col), False
+        _place(c, cfg, cell, rot,
+               lambda cc, x, y, w, h, i=idx: draw_fn(cc, x, y, w, h,
+                                                     customers[i], cfg, fonts, reader, img))
+
+
 def _build(customers, cfg, img, draw_fn, is_back):
     fonts = _resolve(cfg)
     reader = logo_reader(img)
     c, buf = _new_canvas(cfg)
     pages, _ = build_pages(len(customers), cfg.ordering_mode)
     for cells in pages:
-        _draw_marks(c, cfg)
-        for (row, col, idx) in cells:
-            if idx is None:
-                continue
-            if is_back:
-                brow, bcol, rot = _back_cell(cfg, row, col)
-                cell = _cell_rect(cfg, brow, bcol)
-            else:
-                cell, rot = _cell_rect(cfg, row, col), False
-            _place(c, cfg, cell, rot,
-                   lambda cc, x, y, w, h, i=idx: draw_fn(cc, x, y, w, h,
-                                                         customers[i], cfg, fonts, reader, img))
+        _draw_face(c, cfg, cells, customers, draw_fn, fonts, reader, img, is_back)
         c.showPage()
     c.save()
     return buf.getvalue()
 
 
 def generate_front(customers, cfg: Config, img=None) -> bytes:
-    """front_cards.pdf — the NAME side."""
+    """front_cards.pdf — the NAME side (manual-duplex: print this first)."""
     return _build(customers, cfg, img, draw_front, is_back=False)
 
 
 def generate_back(customers, cfg: Config, img=None) -> bytes:
     """back_cards.pdf — the MEALS side, imposed for the chosen flip mode."""
     return _build(customers, cfg, img, draw_back, is_back=True)
+
+
+def generate_combined(customers, cfg: Config, img=None) -> bytes:
+    """
+    hang_tags.pdf — ONE file for an AUTO-DUPLEX printer.
+
+    Pages are interleaved front/back per sheet:
+        page 1 = sheet 1 FRONT, page 2 = sheet 1 BACK,
+        page 3 = sheet 2 FRONT, page 4 = sheet 2 BACK, ...
+    The operator prints this single file with "Two-Sided" enabled; the printer
+    flips each sheet. The BACK imposition is exactly the same as a manual
+    long-edge flip (see `_back_cell`), so cut-stack ordering and the front/back
+    alignment behave identically to the two-file flow.
+    """
+    fonts = _resolve(cfg)
+    reader = logo_reader(img)
+    c, buf = _new_canvas(cfg)
+    pages, _ = build_pages(len(customers), cfg.ordering_mode)
+    for cells in pages:
+        _draw_face(c, cfg, cells, customers, draw_front, fonts, reader, img, is_back=False)
+        c.showPage()
+        _draw_face(c, cfg, cells, customers, draw_back, fonts, reader, img, is_back=True)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
 
 
 # ===========================================================================
@@ -623,6 +659,23 @@ def _draw_test(c, x, y, w, h, number, side, sub, cfg, fonts):
                    color=(0.45, 0.45, 0.45))
 
 
+def _draw_test_face(c, cfg, cells, p, n_pages, fonts, is_back):
+    """One numbered side of one test sheet (shared by both test builders)."""
+    _draw_marks(c, cfg)
+    for (row, col, idx) in cells:
+        if idx is None:
+            continue
+        if is_back:
+            brow, bcol, rot = _back_cell(cfg, row, col)
+            cell = _cell_rect(cfg, brow, bcol)
+        else:
+            cell, rot = _cell_rect(cfg, row, col), False
+        _place(c, cfg, cell, rot,
+               lambda cc, x, y, w, h, i=idx: _draw_test(
+                   cc, x, y, w, h, i + 1, "BACK" if is_back else "FRONT",
+                   f"sheet {p + 1}/{n_pages}", cfg, fonts))
+
+
 def generate_duplex_test(cfg: Config, n: int = 8) -> tuple[bytes, bytes]:
     """
     Two numbered PDFs to verify alignment BEFORE using cardstock. Uses the exact
@@ -636,24 +689,30 @@ def generate_duplex_test(cfg: Config, n: int = 8) -> tuple[bytes, bytes]:
     def render(is_back):
         c, buf = _new_canvas(cfg)
         for p, cells in enumerate(pages):
-            _draw_marks(c, cfg)
-            for (row, col, idx) in cells:
-                if idx is None:
-                    continue
-                if is_back:
-                    brow, bcol, rot = _back_cell(cfg, row, col)
-                    cell = _cell_rect(cfg, brow, bcol)
-                else:
-                    cell, rot = _cell_rect(cfg, row, col), False
-                _place(c, cfg, cell, rot,
-                       lambda cc, x, y, w, h, i=idx, pp=p: _draw_test(
-                           cc, x, y, w, h, i + 1, "BACK" if is_back else "FRONT",
-                           f"sheet {pp + 1}/{n_pages}", cfg, fonts))
+            _draw_test_face(c, cfg, cells, p, n_pages, fonts, is_back)
             c.showPage()
         c.save()
         return buf.getvalue()
 
     return render(False), render(True)
+
+
+def generate_duplex_test_combined(cfg: Config, n: int = 8) -> bytes:
+    """
+    ONE interleaved numbered PDF (front/back per sheet) to verify alignment on an
+    AUTO-DUPLEX printer before using cardstock. Print two-sided: each BACK number
+    should land directly behind its matching FRONT number, right-side-up.
+    """
+    fonts = _resolve(cfg)
+    pages, n_pages = build_pages(n, cfg.ordering_mode)
+    c, buf = _new_canvas(cfg)
+    for p, cells in enumerate(pages):
+        _draw_test_face(c, cfg, cells, p, n_pages, fonts, is_back=False)
+        c.showPage()
+        _draw_test_face(c, cfg, cells, p, n_pages, fonts, is_back=True)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
 
 
 # ===========================================================================

@@ -87,6 +87,16 @@ def build_config() -> Config:
     s.header("⚙️ Configuration")
 
     with s.expander("Layout & printing", expanded=True):
+        cfg.duplex_mode = st.radio(
+            "Printer / duplex",
+            [C.DUPLEX_AUTO, C.DUPLEX_MANUAL],
+            format_func=lambda v: "Auto-duplex printer — one file"
+            if v == C.DUPLEX_AUTO else "Manual duplex — two files, flip yourself",
+            help="Pick 'Auto-duplex' if your printer prints both sides on its own "
+                 "(you choose Two-Sided in the print dialog). You'll get ONE file. "
+                 "Pick 'Manual' to get separate front/back files you flip by hand.",
+        )
+        _is_auto = cfg.duplex_mode == C.DUPLEX_AUTO
         cfg.orientation = st.radio(
             "Orientation",
             [C.ORIENT_LANDSCAPE, C.ORIENT_PORTRAIT],
@@ -94,12 +104,20 @@ def build_config() -> Config:
             if v == C.ORIENT_LANDSCAPE else "Upright / portrait",
         )
         cfg.flip_mode = st.radio(
-            "Flip mode (manual duplex)",
+            "Printer binding" if _is_auto else "Flip mode (manual duplex)",
             [C.FLIP_LONG_EDGE, C.FLIP_SHORT_EDGE],
-            format_func=lambda v: "Long edge (flip like a book)"
-            if v == C.FLIP_LONG_EDGE else "Short edge (flip like a notepad)",
-            help="Which way you turn the stack over between sides. Confirm with "
-                 "the duplex test PDFs.",
+            format_func=(
+                (lambda v: "Long-edge binding (printer default)"
+                 if v == C.FLIP_LONG_EDGE else "Short-edge binding")
+                if _is_auto else
+                (lambda v: "Long edge (flip like a book)"
+                 if v == C.FLIP_LONG_EDGE else "Short edge (flip like a notepad)")
+            ),
+            help=("Match this to your printer's Two-Sided setting (Long-Edge is the "
+                  "usual default). If backs come out on the wrong card, switch this."
+                  if _is_auto else
+                  "Which way you turn the stack over between sides.")
+                 + " Confirm with the alignment test first.",
         )
         cfg.ordering_mode = st.radio(
             "Card ordering",
@@ -306,9 +324,15 @@ with tab_map:
 # Generate PDFs
 # ===========================================================================
 st.subheader("⑤ Generate PDFs")
-st.caption("Print **front_cards.pdf**, flip the stack, then print "
-           "**back_cards.pdf** on the same sheets. Cut with the guillotine along "
-           "the lines, then stack per the cut-stack order. Test on plain paper first.")
+if cfg.duplex_mode == C.DUPLEX_AUTO:
+    st.caption("Print **hang_tags.pdf** with **Two-Sided** turned on — your printer "
+               "does both sides. Then cut with the guillotine along the cross marks "
+               "and stack per the cut-stack order. Run the alignment test on plain "
+               "paper first.")
+else:
+    st.caption("Print **front_cards.pdf**, flip the stack, then print "
+               "**back_cards.pdf** on the same sheets. Cut with the guillotine along "
+               "the lines, then stack per the cut-stack order. Test on plain paper first.")
 
 # --- Print scope: all / only customs / hand-picked ---------------------------
 # For partial reprints (e.g. a batch that was missed, or one damaged card)
@@ -353,39 +377,64 @@ _fp_payload = {
 }
 _fingerprint = _hashlib.md5(
     _json.dumps(_fp_payload, sort_keys=True, default=str).encode()).hexdigest()
+_pdf_keys = ("front_pdf", "back_pdf", "combined_pdf",
+             "test_front", "test_back", "test_combined")
 if st.session_state.get("pdf_fingerprint") != _fingerprint:
-    stale = any(k in st.session_state
-                for k in ("front_pdf", "back_pdf", "test_front", "test_back"))
-    for k in ("front_pdf", "back_pdf", "test_front", "test_back"):
+    stale = any(k in st.session_state for k in _pdf_keys)
+    for k in _pdf_keys:
         st.session_state.pop(k, None)
     st.session_state["pdf_fingerprint"] = _fingerprint
     if stale:
         st.info("Settings changed — click Generate again to rebuild the PDFs.")
 
 g1, g2 = st.columns(2)
-with g1:
-    st.markdown("**Customer cards**")
-    if st.button("Generate customer cards", type="primary",
-                 disabled=not print_customers):
-        with st.spinner("Building card PDFs…"):
-            st.session_state["front_pdf"] = pdf.generate_front(print_customers, cfg, logo_img)
-            st.session_state["back_pdf"] = pdf.generate_back(print_customers, cfg, logo_img)
-    if "front_pdf" in st.session_state:
-        st.download_button("⬇︎ front_cards.pdf", st.session_state["front_pdf"],
-                           "front_cards.pdf", "application/pdf")
-        st.download_button("⬇︎ back_cards.pdf", st.session_state["back_pdf"],
-                           "back_cards.pdf", "application/pdf")
+if cfg.duplex_mode == C.DUPLEX_AUTO:
+    with g1:
+        st.markdown("**Customer cards**")
+        if st.button("Generate customer cards", type="primary",
+                     disabled=not print_customers):
+            with st.spinner("Building card PDF…"):
+                st.session_state["combined_pdf"] = pdf.generate_combined(
+                    print_customers, cfg, logo_img)
+        if "combined_pdf" in st.session_state:
+            st.download_button("⬇︎ hang_tags.pdf", st.session_state["combined_pdf"],
+                               "hang_tags.pdf", "application/pdf")
+            st.caption("Print this with **Two-Sided** on. One file = both sides.")
 
-with g2:
-    st.markdown("**Duplex alignment test**")
-    st.caption("Numbered cards to verify flip alignment before using cardstock.")
-    if st.button("Generate duplex test"):
-        with st.spinner("Building test PDFs…"):
-            f, b = pdf.generate_duplex_test(cfg, n=8)
-            st.session_state["test_front"] = f
-            st.session_state["test_back"] = b
-    if "test_front" in st.session_state:
-        st.download_button("⬇︎ duplex_test_front.pdf", st.session_state["test_front"],
-                           "duplex_test_front.pdf", "application/pdf")
-        st.download_button("⬇︎ duplex_test_back.pdf", st.session_state["test_back"],
-                           "duplex_test_back.pdf", "application/pdf")
+    with g2:
+        st.markdown("**Duplex alignment test**")
+        st.caption("Numbered cards to verify two-sided alignment before using cardstock.")
+        if st.button("Generate duplex test"):
+            with st.spinner("Building test PDF…"):
+                st.session_state["test_combined"] = pdf.generate_duplex_test_combined(
+                    cfg, n=8)
+        if "test_combined" in st.session_state:
+            st.download_button("⬇︎ duplex_test.pdf", st.session_state["test_combined"],
+                               "duplex_test.pdf", "application/pdf")
+else:
+    with g1:
+        st.markdown("**Customer cards**")
+        if st.button("Generate customer cards", type="primary",
+                     disabled=not print_customers):
+            with st.spinner("Building card PDFs…"):
+                st.session_state["front_pdf"] = pdf.generate_front(print_customers, cfg, logo_img)
+                st.session_state["back_pdf"] = pdf.generate_back(print_customers, cfg, logo_img)
+        if "front_pdf" in st.session_state:
+            st.download_button("⬇︎ front_cards.pdf", st.session_state["front_pdf"],
+                               "front_cards.pdf", "application/pdf")
+            st.download_button("⬇︎ back_cards.pdf", st.session_state["back_pdf"],
+                               "back_cards.pdf", "application/pdf")
+
+    with g2:
+        st.markdown("**Duplex alignment test**")
+        st.caption("Numbered cards to verify flip alignment before using cardstock.")
+        if st.button("Generate duplex test"):
+            with st.spinner("Building test PDFs…"):
+                f, b = pdf.generate_duplex_test(cfg, n=8)
+                st.session_state["test_front"] = f
+                st.session_state["test_back"] = b
+        if "test_front" in st.session_state:
+            st.download_button("⬇︎ duplex_test_front.pdf", st.session_state["test_front"],
+                               "duplex_test_front.pdf", "application/pdf")
+            st.download_button("⬇︎ duplex_test_back.pdf", st.session_state["test_back"],
+                               "duplex_test_back.pdf", "application/pdf")
