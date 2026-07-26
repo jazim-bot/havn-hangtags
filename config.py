@@ -153,12 +153,13 @@ class Config:
     back_flip_180: bool = True    # rotate every BACK card 180 in place (positions
                                   # unchanged). ON by default — matches the user's
                                   # printer/flip; untick if backs come out inverted.
-    cut_style: str = MARK_CENTER  # soft guide-mark style (see MARK_* above).
-                                  # Center cut-lines by default: full dashed
-                                  # vertical + horizontal midlines, the exact two
-                                  # cuts the hot-dog method makes, so the guillotine
-                                  # has an edge-to-edge line to follow. They sit
-                                  # inside the printable area (no edge clipping).
+    cut_style: str = MARK_CROSS   # soft guide-mark style (see MARK_* above).
+                                  # Small center cross by default: a guillotine
+                                  # never lines up 100%, so full lines would leave
+                                  # visible bits on the finished cards. A tiny cross
+                                  # at the center intersection gets cut away and
+                                  # stays off the customer's card, while still
+                                  # marking where the two cuts meet.
     mark_len: float = 0.35        # guide-mark length (inches) — bigger cross arms
     mark_weight: float = 0.7      # guide-mark stroke weight (points)
 

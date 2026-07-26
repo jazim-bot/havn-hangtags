@@ -141,25 +141,24 @@ def build_config() -> Config:
             help="Rotates every back card 180° in place (positions unchanged). "
                  "Untick only if the meals side prints upside-down with it on.",
         )
-        _mark_opts = [C.MARK_CENTER, C.MARK_CROSS, C.MARK_TICKS, C.MARK_CORNERS,
+        _mark_opts = [C.MARK_CROSS, C.MARK_CENTER, C.MARK_TICKS, C.MARK_CORNERS,
                       C.MARK_LINES, C.MARK_NONE]
         cfg.cut_style = st.selectbox(
             "Cut guide marks",
             _mark_opts,
             index=_mark_opts.index(Config().cut_style),  # default from Config
             format_func=lambda v: {
-                C.MARK_CENTER: "Center cut-lines (recommended for hot-dog)",
-                C.MARK_CROSS: "Center cross",
+                C.MARK_CROSS: "Center cross (recommended)",
+                C.MARK_CENTER: "Center cut-lines (dashed — can show on cards)",
                 C.MARK_TICKS: "Edge ticks (get clipped by some printers)",
                 C.MARK_CORNERS: "Corner ticks",
                 C.MARK_LINES: "Soft full lines",
                 C.MARK_NONE: "None",
             }[v],
-            help="Soft guides for lining up the guillotine. 'Center cut-lines' draws "
-                 "the full dashed vertical + horizontal midlines — the exact two cuts "
-                 "the hot-dog method makes — so the blade has an edge-to-edge line to "
-                 "follow. They sit inside the printable area, so the printer's border "
-                 "can't clip them. Same marks print on both sides.",
+            help="Soft guides for the guillotine. The small center cross marks where "
+                 "the two cuts meet but stays tiny, so it gets cut away and doesn't "
+                 "show on the customer's card (a guillotine never lines up 100%, so "
+                 "full lines would leave visible bits). Same cross prints on both sides.",
         )
 
     with s.expander("Logo"):
@@ -355,7 +354,7 @@ if cfg.ordering_mode == C.ORDER_HOTDOG:
         "3. Cut the stack **across the middle**.\n"
         "4. Put the **pile that starts with #1 on top** of the other pile — the "
         "deck is now in customer order.\n\n"
-        "The dashed center lines show exactly where both cuts go. (Customer #1 "
+        "The little cross in the middle marks where both cuts meet. (Customer #1 "
         "prints at the top-right of sheet 1.)")
 elif cfg.ordering_mode == C.ORDER_CUT_STACK:
     st.info("**Cut-stack:** cut every sheet into its 4 cards, make 4 position-piles "
