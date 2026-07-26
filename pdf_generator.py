@@ -46,6 +46,10 @@ TL, TR, BL, BR = (0, 0), (0, 1), (1, 0), (1, 1)
 # Physical pile-stacking order the operator performs: cut into 4 position-piles,
 # then stack them clockwise TL -> TR -> BR -> BL. (From the spec's worked example.)
 STACK_ORDER = [TL, TR, BR, BL]
+# 2-cut "hot-dog" method run order (see build_pages): #1 at top-right, then the
+# runs fall out as TR, TL, BR, BL after the vertical cut -> stack right-on-left ->
+# horizontal cut -> pile-starting-with-#1 on top.
+HOTDOG_ORDER = [TR, TL, BR, BL]
 READING_ORDER = [TL, TR, BL, BR]  # plain "sequential" mode
 
 
@@ -188,16 +192,32 @@ def build_pages(n_customers: int, ordering: str) -> tuple[list[list[tuple]], int
     Worked example N=8 -> P=2:
         page0: TL=0 TR=2 BR=4 BL=6      page1: TL=1 TR=3 BR=5 BL=7
     After cut+stack (TL[0,1] TR[2,3] BR[4,5] BL[6,7]) the deck is 0..7. Matches
-    the spec exactly. 'sequential' just lays cards out in reading order.
+    the spec exactly.
+
+    HOT-DOG MATH — the simpler 2-cut method. Same contiguous-run idea, but the
+    physical steps set a different position order (HOTDOG_ORDER = TR, TL, BR, BL):
+      1. Vertical "hot-dog" cut  -> LEFT strip (TL/BL) and RIGHT strip (TR/BR).
+      2. Put the RIGHT strip ON TOP of the LEFT strip.
+      3. Horizontal cut down the middle -> a FAR (top-of-card) pile and a NEAR pile.
+         FAR pile top->bottom = TR(all pages), TL(all pages) = customers 0..2P-1.
+         NEAR pile             = BR(all pages), BL(all pages) = customers 2P..4P-1.
+      4. Drop the FAR pile (starts at #1) on top of the NEAR pile -> deck 0..N-1.
+    So card at (page p, HOTDOG_ORDER[k]) = customer k*P + p, and customer #1 lands
+    at the sheet's top-right. (Verified by tests.) 'sequential' = plain reading order.
     """
     per = 4
     n_pages = max(1, math.ceil(n_customers / per)) if n_customers else 0
     pages: list[list[tuple]] = []
-    order = STACK_ORDER if ordering == C.ORDER_CUT_STACK else READING_ORDER
+    if ordering == C.ORDER_CUT_STACK:
+        order, contiguous = STACK_ORDER, True
+    elif ordering == C.ORDER_HOTDOG:
+        order, contiguous = HOTDOG_ORDER, True
+    else:
+        order, contiguous = READING_ORDER, False
     for p in range(n_pages):
         cells = []
         for k, (r, col) in enumerate(order):
-            idx = (k * n_pages + p) if ordering == C.ORDER_CUT_STACK else (p * per + k)
+            idx = (k * n_pages + p) if contiguous else (p * per + k)
             cells.append((r, col, idx if idx < n_customers else None))
         pages.append(cells)
     return pages, n_pages
@@ -538,6 +558,17 @@ def _draw_marks(c, cfg):
             c.line(x, 0, x, ph)
         for y in ys:
             c.line(0, y, pw, y)
+
+    elif style == C.MARK_CENTER:
+        # Full dashed midlines along the interior cuts only (for the 2x2 grid that
+        # is just the vertical + horizontal center cut). Gives the guillotine an
+        # edge-to-edge line to follow — the two cuts the hot-dog method makes.
+        c.setDash(4, 4)
+        for x in ix:
+            c.line(x, 0, x, ph)
+        for y in iy:
+            c.line(0, y, pw, y)
+        c.setDash()  # reset to solid for anything drawn afterwards
 
     elif style == C.MARK_CROSS:
         for x in ix:

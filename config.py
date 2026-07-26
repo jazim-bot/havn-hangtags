@@ -53,6 +53,13 @@ DUPLEX_MANUAL = "manual"
 #   sequential — plain left-to-right, top-to-bottom order on each sheet.
 # ---------------------------------------------------------------------------
 ORDER_CUT_STACK = "cut_stack"
+# hotdog — the simpler 2-cut method the operator uses: cut the sheet-stack
+#          vertically ("hot-dog") into two tall strips, put the RIGHT strip on
+#          top of the LEFT strip, cut horizontally down the middle, then drop the
+#          pile that starts with #1 on top of the other. Only two cuts + one
+#          stack move (vs cutting into 4 piles). Customer #1 lands at the sheet's
+#          top-right. See build_pages() for the imposition math.
+ORDER_HOTDOG = "hotdog"
 ORDER_SEQUENTIAL = "sequential"
 
 # Card content orientation. The physical card is always 4.25 x 5.5 (so it tiles
@@ -84,6 +91,7 @@ BRAND_GREEN_HEX = "#0C200E"
 #   none    — no marks.
 MARK_TICKS = "ticks"
 MARK_CROSS = "cross"
+MARK_CENTER = "center"   # full dashed midlines (vertical + horizontal center cuts)
 MARK_CORNERS = "corners"
 MARK_LINES = "lines"
 MARK_NONE = "none"
@@ -141,14 +149,16 @@ class Config:
     # --- Printing / imposition -----------------------------------------------
     duplex_mode: str = DUPLEX_AUTO  # auto-duplex printer (one file) by default now
     flip_mode: str = FLIP_LONG_EDGE
-    ordering_mode: str = ORDER_CUT_STACK
+    ordering_mode: str = ORDER_HOTDOG  # simpler 2-cut method by default now
     back_flip_180: bool = True    # rotate every BACK card 180 in place (positions
                                   # unchanged). ON by default — matches the user's
                                   # printer/flip; untick if backs come out inverted.
-    cut_style: str = MARK_CROSS   # soft guide-mark style (see MARK_* above).
-                                  # Cross-in-the-middle by default: it sits inside
-                                  # the printable area, so the printer's edge border
-                                  # can't clip it the way edge ticks get clipped.
+    cut_style: str = MARK_CENTER  # soft guide-mark style (see MARK_* above).
+                                  # Center cut-lines by default: full dashed
+                                  # vertical + horizontal midlines, the exact two
+                                  # cuts the hot-dog method makes, so the guillotine
+                                  # has an edge-to-edge line to follow. They sit
+                                  # inside the printable area (no edge clipping).
     mark_len: float = 0.35        # guide-mark length (inches) — bigger cross arms
     mark_weight: float = 0.7      # guide-mark stroke weight (points)
 

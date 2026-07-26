@@ -119,11 +119,21 @@ def build_config() -> Config:
                   "Which way you turn the stack over between sides.")
                  + " Confirm with the alignment test first.",
         )
+        _order_opts = [C.ORDER_HOTDOG, C.ORDER_CUT_STACK, C.ORDER_SEQUENTIAL]
         cfg.ordering_mode = st.radio(
             "Card ordering",
-            [C.ORDER_CUT_STACK, C.ORDER_SEQUENTIAL],
-            format_func=lambda v: "Cut-stack (cut into 4 piles & stack)"
-            if v == C.ORDER_CUT_STACK else "Sequential (plain page order)",
+            _order_opts,
+            index=_order_opts.index(Config().ordering_mode),
+            format_func=lambda v: {
+                C.ORDER_HOTDOG: "Hot-dog (2 cuts) — cut lengthwise, stack, cut again",
+                C.ORDER_CUT_STACK: "Cut-stack (cut into 4 piles & stack)",
+                C.ORDER_SEQUENTIAL: "Sequential (plain page order)",
+            }[v],
+            help="Hot-dog = the simple 2-cut method: cut the printed stack down the "
+                 "middle lengthwise into two strips, put the RIGHT strip on top of "
+                 "the LEFT, cut across the middle, then drop the pile starting with "
+                 "#1 on top. Customer #1 prints at the top-right of sheet 1. "
+                 "Confirm with the alignment test on plain paper first.",
         )
         cfg.back_flip_180 = st.checkbox(
             "Rotate back 180°",
@@ -131,22 +141,25 @@ def build_config() -> Config:
             help="Rotates every back card 180° in place (positions unchanged). "
                  "Untick only if the meals side prints upside-down with it on.",
         )
-        _mark_opts = [C.MARK_CROSS, C.MARK_TICKS, C.MARK_CORNERS,
+        _mark_opts = [C.MARK_CENTER, C.MARK_CROSS, C.MARK_TICKS, C.MARK_CORNERS,
                       C.MARK_LINES, C.MARK_NONE]
         cfg.cut_style = st.selectbox(
             "Cut guide marks",
             _mark_opts,
             index=_mark_opts.index(Config().cut_style),  # default from Config
             format_func=lambda v: {
-                C.MARK_CROSS: "Center cross (recommended)",
+                C.MARK_CENTER: "Center cut-lines (recommended for hot-dog)",
+                C.MARK_CROSS: "Center cross",
                 C.MARK_TICKS: "Edge ticks (get clipped by some printers)",
                 C.MARK_CORNERS: "Corner ticks",
                 C.MARK_LINES: "Soft full lines",
                 C.MARK_NONE: "None",
             }[v],
-            help="Soft guides for lining up the guillotine. The center cross sits "
-                 "mid-sheet so the printer's edge border can't clip it; cut through "
-                 "it horizontally and vertically. Same cross prints on both sides.",
+            help="Soft guides for lining up the guillotine. 'Center cut-lines' draws "
+                 "the full dashed vertical + horizontal midlines — the exact two cuts "
+                 "the hot-dog method makes — so the blade has an edge-to-edge line to "
+                 "follow. They sit inside the printable area, so the printer's border "
+                 "can't clip them. Same marks print on both sides.",
         )
 
     with s.expander("Logo"):
@@ -326,13 +339,28 @@ with tab_map:
 st.subheader("⑤ Generate PDFs")
 if cfg.duplex_mode == C.DUPLEX_AUTO:
     st.caption("Print **hang_tags.pdf** with **Two-Sided** turned on — your printer "
-               "does both sides. Then cut with the guillotine along the cross marks "
-               "and stack per the cut-stack order. Run the alignment test on plain "
-               "paper first.")
+               "does both sides. Then cut and stack (see below). Run the alignment "
+               "test on plain paper first.")
 else:
     st.caption("Print **front_cards.pdf**, flip the stack, then print "
-               "**back_cards.pdf** on the same sheets. Cut with the guillotine along "
-               "the lines, then stack per the cut-stack order. Test on plain paper first.")
+               "**back_cards.pdf** on the same sheets. Then cut and stack (see below). "
+               "Test on plain paper first.")
+
+if cfg.ordering_mode == C.ORDER_HOTDOG:
+    st.info(
+        "**Hot-dog cut & stack (2 cuts):**\n"
+        "1. Keep the printed sheets in order and cut the whole stack **down the "
+        "middle lengthwise** (hot-dog) → a left strip and a right strip.\n"
+        "2. Put the **right strip on top of the left strip**.\n"
+        "3. Cut the stack **across the middle**.\n"
+        "4. Put the **pile that starts with #1 on top** of the other pile — the "
+        "deck is now in customer order.\n\n"
+        "The dashed center lines show exactly where both cuts go. (Customer #1 "
+        "prints at the top-right of sheet 1.)")
+elif cfg.ordering_mode == C.ORDER_CUT_STACK:
+    st.info("**Cut-stack:** cut every sheet into its 4 cards, make 4 position-piles "
+            "(top-left, top-right, bottom-right, bottom-left), then stack those "
+            "piles in that order → the deck is in customer order.")
 
 # --- Print scope: all / only customs / hand-picked ---------------------------
 # For partial reprints (e.g. a batch that was missed, or one damaged card)
