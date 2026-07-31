@@ -768,6 +768,32 @@ def pdf_to_png_pages(pdf_bytes: bytes, dpi: int = 300) -> list[bytes]:
     return pages
 
 
+def flatten_to_image_pdf(pdf_bytes: bytes, dpi: int = 300) -> bytes:
+    """
+    Rebuild a PDF where every page is a single flat raster image of the original
+    page — same page size and order, but NO text or vectors for an old printer
+    driver to 'convert'. Keeps the one-file, print-Two-Sided convenience of the
+    PDF while avoiding the mangling that makes the HP choke. Page geometry (and so
+    the duplex imposition) is unchanged; only the content is rasterized.
+    """
+    src = fitz.open(stream=pdf_bytes, filetype="pdf")
+    out = fitz.open()
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    for page in src:
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        rect = page.rect  # keep original page size (points)
+        newpage = out.new_page(width=rect.width, height=rect.height)
+        # Insert the already-PNG-compressed bytes (mostly-white pages compress to
+        # ~tens of KB). Inserting the raw pixmap instead stores it uncompressed and
+        # balloons the file to tens of MB per page — don't do that.
+        newpage.insert_image(rect, stream=pix.tobytes("png"))
+    data = out.tobytes(garbage=3, deflate=True)
+    src.close()
+    out.close()
+    return data
+
+
 # ===========================================================================
 # Single-card preview (for the Streamlit UI) — drawn upright as the tag reads
 # ===========================================================================

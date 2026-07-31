@@ -395,17 +395,21 @@ fmt_col, dpi_col = st.columns([2, 1])
 with fmt_col:
     output_format = st.radio(
         "Output format",
-        ["PDF", "PNG images (ZIP)"],
+        ["PDF", "Flat image PDF", "PNG images (ZIP)"],
         horizontal=True,
-        help="Choose PNG if your printer garbles the PDF — it prints the sheets as "
-             "flat images. Same layout, ordering and cut marks either way.",
+        help="If your printer garbles the normal PDF, use **Flat image PDF** — one "
+             "file, still printed Two-Sided, but every page is a flat image with no "
+             "text/vectors to confuse an old driver. **PNG images** gives the same "
+             "thing as a ZIP of loose images. Same layout, ordering and cut marks.",
     )
 _is_png = output_format.startswith("PNG")
+_is_flat = output_format.startswith("Flat")
+_is_raster = _is_png or _is_flat
 with dpi_col:
     png_dpi = st.selectbox("Image quality", [300, 200, 150, 600],
-                           index=0, disabled=not _is_png,
+                           index=0, disabled=not _is_raster,
                            format_func=lambda d: f"{d} dpi", key="png_dpi") \
-        if _is_png else 300
+        if _is_raster else 300
 
 
 def _zip_named(named: list[tuple[str, bytes]]) -> bytes:
@@ -447,7 +451,9 @@ _fingerprint = _hashlib.md5(
     _json.dumps(_fp_payload, sort_keys=True, default=str).encode()).hexdigest()
 _pdf_keys = ("front_pdf", "back_pdf", "combined_pdf",
              "test_front", "test_back", "test_combined",
-             "combined_zip", "cards_zip", "test_zip")
+             "combined_zip", "cards_zip", "test_zip",
+             "combined_flat", "front_flat", "back_flat", "test_flat",
+             "test_front_flat", "test_back_flat")
 if st.session_state.get("pdf_fingerprint") != _fingerprint:
     stale = any(k in st.session_state for k in _pdf_keys)
     for k in _pdf_keys:
@@ -485,6 +491,9 @@ with g1:
                 _combined = pdf.generate_combined(print_customers, cfg, logo_img)
                 if _is_png:
                     st.session_state["combined_zip"] = _combined_pngs(_combined)
+                elif _is_flat:
+                    st.session_state["combined_flat"] = pdf.flatten_to_image_pdf(
+                        _combined, png_dpi)
                 else:
                     st.session_state["combined_pdf"] = _combined
         if _is_png and "combined_zip" in st.session_state:
@@ -492,7 +501,12 @@ with g1:
                                "hang_tags_png.zip", "application/zip")
             st.caption("Unzip, select **all** the images, and print **Two-Sided**. "
                        "They're numbered in print order (front, back, front, back…).")
-        elif not _is_png and "combined_pdf" in st.session_state:
+        elif _is_flat and "combined_flat" in st.session_state:
+            st.download_button("⬇︎ hang_tags.pdf", st.session_state["combined_flat"],
+                               "hang_tags.pdf", "application/pdf")
+            st.caption("One file, flat images — print **Two-Sided**. Best for a "
+                       "printer that garbles the normal PDF.")
+        elif not _is_raster and "combined_pdf" in st.session_state:
             st.download_button("⬇︎ hang_tags.pdf", st.session_state["combined_pdf"],
                                "hang_tags.pdf", "application/pdf")
             st.caption("Print this with **Two-Sided** on. One file = both sides.")
@@ -504,6 +518,9 @@ with g1:
                 _bp = pdf.generate_back(print_customers, cfg, logo_img)
                 if _is_png:
                     st.session_state["cards_zip"] = _front_back_pngs(_fp, _bp)
+                elif _is_flat:
+                    st.session_state["front_flat"] = pdf.flatten_to_image_pdf(_fp, png_dpi)
+                    st.session_state["back_flat"] = pdf.flatten_to_image_pdf(_bp, png_dpi)
                 else:
                     st.session_state["front_pdf"] = _fp
                     st.session_state["back_pdf"] = _bp
@@ -512,7 +529,13 @@ with g1:
                                "cards_png.zip", "application/zip")
             st.caption("Print the **fronts/** images, flip the stack, then print "
                        "the **backs/** images.")
-        elif not _is_png and "front_pdf" in st.session_state:
+        elif _is_flat and "front_flat" in st.session_state:
+            st.download_button("⬇︎ front_cards.pdf", st.session_state["front_flat"],
+                               "front_cards.pdf", "application/pdf")
+            st.download_button("⬇︎ back_cards.pdf", st.session_state["back_flat"],
+                               "back_cards.pdf", "application/pdf")
+            st.caption("Flat images. Print the fronts, flip, then print the backs.")
+        elif not _is_raster and "front_pdf" in st.session_state:
             st.download_button("⬇︎ front_cards.pdf", st.session_state["front_pdf"],
                                "front_cards.pdf", "application/pdf")
             st.download_button("⬇︎ back_cards.pdf", st.session_state["back_pdf"],
@@ -527,22 +550,35 @@ with g2:
                 _tpdf = pdf.generate_duplex_test_combined(cfg, n=8)
                 if _is_png:
                     st.session_state["test_zip"] = _combined_pngs(_tpdf)
+                elif _is_flat:
+                    st.session_state["test_flat"] = pdf.flatten_to_image_pdf(_tpdf, png_dpi)
                 else:
                     st.session_state["test_combined"] = _tpdf
             else:
                 _tf, _tb = pdf.generate_duplex_test(cfg, n=8)
                 if _is_png:
                     st.session_state["test_zip"] = _front_back_pngs(_tf, _tb)
+                elif _is_flat:
+                    st.session_state["test_front_flat"] = pdf.flatten_to_image_pdf(_tf, png_dpi)
+                    st.session_state["test_back_flat"] = pdf.flatten_to_image_pdf(_tb, png_dpi)
                 else:
                     st.session_state["test_front"] = _tf
                     st.session_state["test_back"] = _tb
     if _is_png and "test_zip" in st.session_state:
         st.download_button("⬇︎ duplex_test_png.zip", st.session_state["test_zip"],
                            "duplex_test_png.zip", "application/zip")
-    elif not _is_png and "test_combined" in st.session_state:
+    elif _is_flat and "test_flat" in st.session_state:
+        st.download_button("⬇︎ duplex_test.pdf", st.session_state["test_flat"],
+                           "duplex_test.pdf", "application/pdf")
+    elif _is_flat and "test_front_flat" in st.session_state:
+        st.download_button("⬇︎ duplex_test_front.pdf", st.session_state["test_front_flat"],
+                           "duplex_test_front.pdf", "application/pdf")
+        st.download_button("⬇︎ duplex_test_back.pdf", st.session_state["test_back_flat"],
+                           "duplex_test_back.pdf", "application/pdf")
+    elif not _is_raster and "test_combined" in st.session_state:
         st.download_button("⬇︎ duplex_test.pdf", st.session_state["test_combined"],
                            "duplex_test.pdf", "application/pdf")
-    elif not _is_png and "test_front" in st.session_state:
+    elif not _is_raster and "test_front" in st.session_state:
         st.download_button("⬇︎ duplex_test_front.pdf", st.session_state["test_front"],
                            "duplex_test_front.pdf", "application/pdf")
         st.download_button("⬇︎ duplex_test_back.pdf", st.session_state["test_back"],
