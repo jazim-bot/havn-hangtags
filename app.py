@@ -335,15 +335,15 @@ with tab_map:
 # ===========================================================================
 # Generate PDFs
 # ===========================================================================
-st.subheader("⑤ Generate PDFs")
+st.subheader("⑤ Generate & download")
 if cfg.duplex_mode == C.DUPLEX_AUTO:
-    st.caption("Print **hang_tags.pdf** with **Two-Sided** turned on — your printer "
-               "does both sides. Then cut and stack (see below). Run the alignment "
-               "test on plain paper first.")
+    st.caption("Print the cards **Two-Sided** — your printer does both sides. Then "
+               "cut and stack (see below). Run the alignment test on plain paper first. "
+               "Use **PNG** below if your printer garbles the PDF.")
 else:
-    st.caption("Print **front_cards.pdf**, flip the stack, then print "
-               "**back_cards.pdf** on the same sheets. Then cut and stack (see below). "
-               "Test on plain paper first.")
+    st.caption("Print the fronts, flip the stack, then print the backs on the same "
+               "sheets. Then cut and stack (see below). Test on plain paper first. "
+               "Use **PNG** below if your printer garbles the PDF.")
 
 if cfg.ordering_mode == C.ORDER_HOTDOG:
     st.info(
@@ -384,6 +384,45 @@ _, n_scope_pages = pdf.build_pages(len(print_customers), cfg.ordering_mode)
 st.caption(f"**{len(print_customers)}** customer(s) → **{n_scope_pages}** sheet(s) per side."
            + ("  ⚠️ None selected." if not print_customers else ""))
 
+# --- Output format: PDF or PNG images ---------------------------------------
+# Some older printer drivers (e.g. an old HP) choke on a vector/text PDF and try
+# to "convert" it. Flat PNG images print exactly as laid out. PNG downloads as a
+# ZIP of one image per sheet-side, named in print order.
+import io as _io
+import zipfile as _zipfile
+
+fmt_col, dpi_col = st.columns([2, 1])
+with fmt_col:
+    output_format = st.radio(
+        "Output format",
+        ["PDF", "PNG images (ZIP)"],
+        horizontal=True,
+        help="Choose PNG if your printer garbles the PDF — it prints the sheets as "
+             "flat images. Same layout, ordering and cut marks either way.",
+    )
+_is_png = output_format.startswith("PNG")
+with dpi_col:
+    png_dpi = st.selectbox("Image quality", [300, 200, 150, 600],
+                           index=0, disabled=not _is_png,
+                           format_func=lambda d: f"{d} dpi", key="png_dpi") \
+        if _is_png else 300
+
+
+def _zip_named(named: list[tuple[str, bytes]]) -> bytes:
+    """Zip a list of (filename, bytes) into a single archive."""
+    buf = _io.BytesIO()
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as z:
+        for fname, data in named:
+            z.writestr(fname, data)
+    return buf.getvalue()
+
+
+def _png_names(n_pages_total: int, i: int, sheet: int, side: str) -> str:
+    """Print-ordered PNG filename, e.g. '02_sheet-01-back.png'."""
+    width = max(2, len(str(n_pages_total)))
+    return f"{i:0{width}d}_sheet-{sheet:02d}-{side}.png"
+
+
 # --- Stale-output guard ------------------------------------------------------
 # The download buttons serve PDFs saved in session_state by the last "Generate"
 # click. If ANY input changes (a sidebar setting, the CSV, meal names, the logo),
@@ -401,67 +440,110 @@ _fp_payload = {
     "names": display_names,
     "logo": _hashlib.md5(logo_bytes).hexdigest() if logo_bytes else "none",
     "scope": [c.name for c in print_customers],
+    "format": output_format,
+    "dpi": png_dpi,
 }
 _fingerprint = _hashlib.md5(
     _json.dumps(_fp_payload, sort_keys=True, default=str).encode()).hexdigest()
 _pdf_keys = ("front_pdf", "back_pdf", "combined_pdf",
-             "test_front", "test_back", "test_combined")
+             "test_front", "test_back", "test_combined",
+             "combined_zip", "cards_zip", "test_zip")
 if st.session_state.get("pdf_fingerprint") != _fingerprint:
     stale = any(k in st.session_state for k in _pdf_keys)
     for k in _pdf_keys:
         st.session_state.pop(k, None)
     st.session_state["pdf_fingerprint"] = _fingerprint
     if stale:
-        st.info("Settings changed — click Generate again to rebuild the PDFs.")
+        st.info("Settings changed — click Generate again to rebuild the output.")
+
+def _combined_pngs(pdf_bytes: bytes) -> bytes:
+    """Rasterize an interleaved front/back PDF into a print-ordered PNG ZIP."""
+    pages = pdf.pdf_to_png_pages(pdf_bytes, dpi=png_dpi)
+    total = len(pages)
+    named = [(_png_names(total, k + 1, k // 2 + 1,
+                         "front" if k % 2 == 0 else "back"), p)
+             for k, p in enumerate(pages)]
+    return _zip_named(named)
+
+
+def _front_back_pngs(front_bytes: bytes, back_bytes: bytes) -> bytes:
+    """Rasterize separate front/back PDFs into a ZIP with fronts/ and backs/ folders."""
+    fpngs = pdf.pdf_to_png_pages(front_bytes, dpi=png_dpi)
+    bpngs = pdf.pdf_to_png_pages(back_bytes, dpi=png_dpi)
+    named = [(f"fronts/sheet-{k + 1:02d}.png", p) for k, p in enumerate(fpngs)]
+    named += [(f"backs/sheet-{k + 1:02d}.png", p) for k, p in enumerate(bpngs)]
+    return _zip_named(named)
+
 
 g1, g2 = st.columns(2)
-if cfg.duplex_mode == C.DUPLEX_AUTO:
-    with g1:
-        st.markdown("**Customer cards**")
+with g1:
+    st.markdown("**Customer cards**")
+    if cfg.duplex_mode == C.DUPLEX_AUTO:
         if st.button("Generate customer cards", type="primary",
                      disabled=not print_customers):
-            with st.spinner("Building card PDF…"):
-                st.session_state["combined_pdf"] = pdf.generate_combined(
-                    print_customers, cfg, logo_img)
-        if "combined_pdf" in st.session_state:
+            with st.spinner("Building cards…"):
+                _combined = pdf.generate_combined(print_customers, cfg, logo_img)
+                if _is_png:
+                    st.session_state["combined_zip"] = _combined_pngs(_combined)
+                else:
+                    st.session_state["combined_pdf"] = _combined
+        if _is_png and "combined_zip" in st.session_state:
+            st.download_button("⬇︎ hang_tags_png.zip", st.session_state["combined_zip"],
+                               "hang_tags_png.zip", "application/zip")
+            st.caption("Unzip, select **all** the images, and print **Two-Sided**. "
+                       "They're numbered in print order (front, back, front, back…).")
+        elif not _is_png and "combined_pdf" in st.session_state:
             st.download_button("⬇︎ hang_tags.pdf", st.session_state["combined_pdf"],
                                "hang_tags.pdf", "application/pdf")
             st.caption("Print this with **Two-Sided** on. One file = both sides.")
-
-    with g2:
-        st.markdown("**Duplex alignment test**")
-        st.caption("Numbered cards to verify two-sided alignment before using cardstock.")
-        if st.button("Generate duplex test"):
-            with st.spinner("Building test PDF…"):
-                st.session_state["test_combined"] = pdf.generate_duplex_test_combined(
-                    cfg, n=8)
-        if "test_combined" in st.session_state:
-            st.download_button("⬇︎ duplex_test.pdf", st.session_state["test_combined"],
-                               "duplex_test.pdf", "application/pdf")
-else:
-    with g1:
-        st.markdown("**Customer cards**")
+    else:
         if st.button("Generate customer cards", type="primary",
                      disabled=not print_customers):
-            with st.spinner("Building card PDFs…"):
-                st.session_state["front_pdf"] = pdf.generate_front(print_customers, cfg, logo_img)
-                st.session_state["back_pdf"] = pdf.generate_back(print_customers, cfg, logo_img)
-        if "front_pdf" in st.session_state:
+            with st.spinner("Building cards…"):
+                _fp = pdf.generate_front(print_customers, cfg, logo_img)
+                _bp = pdf.generate_back(print_customers, cfg, logo_img)
+                if _is_png:
+                    st.session_state["cards_zip"] = _front_back_pngs(_fp, _bp)
+                else:
+                    st.session_state["front_pdf"] = _fp
+                    st.session_state["back_pdf"] = _bp
+        if _is_png and "cards_zip" in st.session_state:
+            st.download_button("⬇︎ cards_png.zip", st.session_state["cards_zip"],
+                               "cards_png.zip", "application/zip")
+            st.caption("Print the **fronts/** images, flip the stack, then print "
+                       "the **backs/** images.")
+        elif not _is_png and "front_pdf" in st.session_state:
             st.download_button("⬇︎ front_cards.pdf", st.session_state["front_pdf"],
                                "front_cards.pdf", "application/pdf")
             st.download_button("⬇︎ back_cards.pdf", st.session_state["back_pdf"],
                                "back_cards.pdf", "application/pdf")
 
-    with g2:
-        st.markdown("**Duplex alignment test**")
-        st.caption("Numbered cards to verify flip alignment before using cardstock.")
-        if st.button("Generate duplex test"):
-            with st.spinner("Building test PDFs…"):
-                f, b = pdf.generate_duplex_test(cfg, n=8)
-                st.session_state["test_front"] = f
-                st.session_state["test_back"] = b
-        if "test_front" in st.session_state:
-            st.download_button("⬇︎ duplex_test_front.pdf", st.session_state["test_front"],
-                               "duplex_test_front.pdf", "application/pdf")
-            st.download_button("⬇︎ duplex_test_back.pdf", st.session_state["test_back"],
-                               "duplex_test_back.pdf", "application/pdf")
+with g2:
+    st.markdown("**Duplex alignment test**")
+    st.caption("Numbered cards to verify alignment before using cardstock.")
+    if st.button("Generate duplex test"):
+        with st.spinner("Building test…"):
+            if cfg.duplex_mode == C.DUPLEX_AUTO:
+                _tpdf = pdf.generate_duplex_test_combined(cfg, n=8)
+                if _is_png:
+                    st.session_state["test_zip"] = _combined_pngs(_tpdf)
+                else:
+                    st.session_state["test_combined"] = _tpdf
+            else:
+                _tf, _tb = pdf.generate_duplex_test(cfg, n=8)
+                if _is_png:
+                    st.session_state["test_zip"] = _front_back_pngs(_tf, _tb)
+                else:
+                    st.session_state["test_front"] = _tf
+                    st.session_state["test_back"] = _tb
+    if _is_png and "test_zip" in st.session_state:
+        st.download_button("⬇︎ duplex_test_png.zip", st.session_state["test_zip"],
+                           "duplex_test_png.zip", "application/zip")
+    elif not _is_png and "test_combined" in st.session_state:
+        st.download_button("⬇︎ duplex_test.pdf", st.session_state["test_combined"],
+                           "duplex_test.pdf", "application/pdf")
+    elif not _is_png and "test_front" in st.session_state:
+        st.download_button("⬇︎ duplex_test_front.pdf", st.session_state["test_front"],
+                           "duplex_test_front.pdf", "application/pdf")
+        st.download_button("⬇︎ duplex_test_back.pdf", st.session_state["test_back"],
+                           "duplex_test_back.pdf", "application/pdf")

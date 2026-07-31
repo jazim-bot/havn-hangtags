@@ -747,6 +747,28 @@ def generate_duplex_test_combined(cfg: Config, n: int = 8) -> bytes:
 
 
 # ===========================================================================
+# PNG export — rasterize finished sheets to flat images
+# ===========================================================================
+def pdf_to_png_pages(pdf_bytes: bytes, dpi: int = 300) -> list[bytes]:
+    """
+    Rasterize every page of a generated PDF to a PNG (returns a list of PNG byte
+    blobs, one per page, in page order).
+
+    Why: some older printer drivers (e.g. the user's HP software) try to
+    re-interpret a vector/text PDF and mangle it. A flat image has no text or
+    vectors to 'convert', so it prints exactly as laid out. This reuses the full
+    PDF layout — it only rasterizes the result — so ordering, duplex imposition
+    and cut marks are identical to the PDF. 300 dpi is crisp for card print.
+    """
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    pages = [page.get_pixmap(matrix=mat, alpha=False).tobytes("png") for page in doc]
+    doc.close()
+    return pages
+
+
+# ===========================================================================
 # Single-card preview (for the Streamlit UI) — drawn upright as the tag reads
 # ===========================================================================
 def render_card_png(cust: Customer, side: str, cfg: Config, img=None,
