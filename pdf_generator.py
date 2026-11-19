@@ -512,8 +512,15 @@ def draw_back(c, x, y, w, h, cust: Customer, cfg, fonts, reader, img):
     # both vertically (all lines stack cleanly above the logo, descenders and all)
     # and horizontally (widest line fits the card width). A 9- or 11-meal order
     # simply shrinks to fit; it never spills over the logo.
-    items = cust.items or [("—", 0)]
-    texts = [f"{qty} × {label}" if qty else label for label, qty in items]
+    items = cust.items or [("—", 0, 0)]
+    texts = []
+    for it in items:
+        label, qty = it[0], it[1]
+        custom = it[2] if len(it) > 2 else 0
+        line = f"{qty} × {label}" if qty else label
+        if custom > 0:                      # flag hand-customized meals
+            line += " (custom)" if custom >= qty else f" ({custom} custom)"
+        texts.append(line)
     region_top = cursor
     region_bottom = logo_top_edge + 0.12 * inch
     _place_lines(c, cx, region_top, region_bottom, texts, fonts["body"], max_w,

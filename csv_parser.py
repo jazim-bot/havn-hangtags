@@ -33,7 +33,7 @@ class Customer:
     """One real customer order, ready to be printed on a card."""
     name: str                       # title-cased display name, e.g. "Kirsten Wilson"
     order_type: str = ""            # "Glass" / "Plastic"
-    items: list = field(default_factory=list)  # [(display_name, qty), ...] qty>0
+    items: list = field(default_factory=list)  # [(display_name, qty, custom), ...] qty>0
     stop: str = ""
     is_plastic: bool = False
     customizations: str = ""        # raw notes, e.g. "Partial customs- 2 total"
@@ -84,28 +84,38 @@ def _col(df: pd.DataFrame, name: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Quantity parsing
 # ---------------------------------------------------------------------------
-def parse_qty(cell: str) -> int:
+def parse_qty_custom(cell: str) -> tuple[int, int]:
     """
-    Turn a meal cell into the TOTAL number of that meal the customer receives.
+    Split a meal cell into (TOTAL meals, CUSTOM meals).
 
-    Havn notation:  "2"      -> 2 regular            -> 2
-                    "(1)"    -> 1 custom             -> 1
-                    "1 (1)"  -> 1 regular + 1 custom -> 2
-                    ""       -> nothing              -> 0
+    Havn "Customs View" notation:
+                    "2"      -> 2 regular            -> (2, 0)
+                    "(1)"    -> 1 custom             -> (1, 1)
+                    "1 (1)"  -> 1 regular + 1 custom -> (2, 1)
+                    ""       -> nothing              -> (0, 0)
     A custom meal is still a physical meal that gets packed, so it counts toward
-    the total shown on the hang tag. We sum the leading regular number and every
-    parenthesised custom number.
+    the TOTAL on the hang tag; CUSTOM is how many of that total are hand-
+    customized (they carry the customer's name in Sharpie) so the tag can flag
+    them. We sum the leading regular number and every parenthesised custom number.
     """
     s = str(cell).strip()
     if not s:
-        return 0
+        return 0, 0
     total = 0
+    custom = 0
     lead = re.match(r"^\s*(\d+)", s)      # regular count at the start
     if lead:
         total += int(lead.group(1))
     for m in re.findall(r"\((\d+)\)", s):  # each custom count in parens
-        total += int(m)
-    return total
+        n = int(m)
+        total += n
+        custom += n
+    return total, custom
+
+
+def parse_qty(cell: str) -> int:
+    """TOTAL meals in a cell (regular + custom). See parse_qty_custom."""
+    return parse_qty_custom(cell)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -187,10 +197,10 @@ def build_customers(
 
         items = []
         for col in meal_columns:            # keep sheet column order
-            qty = parse_qty(row.get(col, ""))
+            qty, custom = parse_qty_custom(row.get(col, ""))
             if qty > 0:
                 label = display_names.get(col, col)
-                items.append((label, qty))
+                items.append((label, qty, custom))
 
         order_type = str(row.get(type_col, "")).strip() if type_col else ""
         customers.append(

@@ -320,8 +320,12 @@ with tab_names:
             "#": range(1, len(customers) + 1),
             "Name": [c.name for c in customers],
             "Type": [c.order_type for c in customers],
-            "Meals": [", ".join(f"{q}× {n}" for n, q in c.items) or "—"
-                      for c in customers],
+            "Meals": [", ".join(
+                f"{it[1]}× {it[0]}"
+                + ((" (custom)" if (len(it) > 2 and it[2] >= it[1]) else
+                    f" ({it[2]} custom)") if len(it) > 2 and it[2] > 0 else "")
+                for it in c.items) or "—"
+                for c in customers],
         }),
         hide_index=True, use_container_width=True)
 
