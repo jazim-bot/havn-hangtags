@@ -142,6 +142,9 @@ class Config:
     body_font: str = "DMSans"     # falls back to Helvetica
 
     # --- Decorative touches ---------------------------------------------------
+    show_type: bool = True        # print GLASS/PLASTIC (order type) on the back;
+                                  # plastic is drawn bold/dark since it's the rare,
+                                  # easy-to-miss case
     show_divider: bool = True     # short rule under the back title
     show_border: bool = False     # subtle keyline frame around each card
     border_inset: float = 0.16    # keyline inset from card edge (inches)

@@ -201,6 +201,8 @@ def build_config() -> Config:
         cfg.show_border = st.checkbox("Keyline border", value=cfg.show_border)
         cfg.show_divider = st.checkbox("Divider under back label",
                                        value=cfg.show_divider)
+        cfg.show_type = st.checkbox("Show Glass/Plastic on back",
+                                    value=cfg.show_type)
 
     return cfg
 

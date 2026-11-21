@@ -486,6 +486,19 @@ def draw_back(c, x, y, w, h, cust: Customer, cfg, fonts, reader, img):
                        bold=cfg.name_bold)
     cursor -= nlh * len(name_lines)
 
+    # --- Glass / Plastic container type -------------------------------------
+    # Most orders are glass; a rare PLASTIC order is easy to miss, so draw it
+    # bold + dark while glass stays a quiet muted label.
+    if getattr(cfg, "show_type", True) and (cust.order_type or "").strip():
+        is_plastic = getattr(cust, "is_plastic", False)
+        cursor -= 0.05 * inch
+        _draw_centered(c, cx, cursor, cust.order_type.strip().upper(),
+                       fonts["body"], cfg.back_title_size,
+                       tracking=cfg.back_title_tracking,
+                       color=(0.0, 0.0, 0.0) if is_plastic else (0.45, 0.45, 0.45),
+                       bold=is_plastic)
+        cursor -= cfg.back_title_size
+
     # --- Optional "YOUR MEALS" label + divider ------------------------------
     if cfg.back_title:
         cursor -= 0.06 * inch
