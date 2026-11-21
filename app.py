@@ -15,14 +15,47 @@ detected from the CSV each week.
 from __future__ import annotations
 
 import hmac
+import importlib
+import os
 
 import pandas as pd
 import streamlit as st
 
 import config as C
-from config import Config
 import csv_parser as parser
 import pdf_generator as pdf
+
+
+# ---------------------------------------------------------------------------
+# Self-heal a stale module cache after a Streamlit Cloud redeploy.
+# On redeploy Streamlit can keep the OLD cached config/csv_parser/pdf_generator
+# modules in memory while running the NEW app.py, so a field this app.py reads
+# (e.g. cfg.show_type) is missing on the stale Config -> AttributeError until a
+# manual reboot. Detect it cheaply: if any of our module files changed on disk
+# since we last loaded them, importlib.reload them. `Config` is re-bound to the
+# fresh class every run so `Config()` can never be the stale one. This removes
+# the "reboot the app after every deploy" step.
+# ---------------------------------------------------------------------------
+@st.cache_resource
+def _module_reload_state():
+    return {"stamp": None}
+
+
+def _fresh_config():
+    try:
+        stamp = max(os.path.getmtime(m.__file__) for m in (C, parser, pdf))
+    except OSError:
+        return C.Config
+    state = _module_reload_state()
+    if state["stamp"] != stamp:
+        importlib.reload(C)       # config first (others import it)
+        importlib.reload(parser)
+        importlib.reload(pdf)
+        state["stamp"] = stamp
+    return C.Config
+
+
+Config = _fresh_config()
 
 st.set_page_config(page_title="Havn Club · Hang-Tag Generator",
                    page_icon="🏷️", layout="wide")
@@ -202,7 +235,7 @@ def build_config() -> Config:
         cfg.show_divider = st.checkbox("Divider under back label",
                                        value=cfg.show_divider)
         cfg.show_type = st.checkbox("Show Glass/Plastic on back",
-                                    value=cfg.show_type)
+                                    value=getattr(cfg, "show_type", True))
 
     return cfg
 
